@@ -67,8 +67,8 @@ CITIES: List[str] = [
     "St. John’s, NL",
 ]
 
-PLACE_DETAIL_FIELDS = "place_id,name,website"
-CSV_HEADERS = ["site_url", "business_name", "industry", "company_name", "city"]
+PLACE_DETAIL_FIELDS = "place_id,name,website,formatted_phone_number"
+CSV_HEADERS = ["site_url", "business_name", "industry", "company_name", "city", "phone_number"]
 
 
 def load_env_file(path: Path = Path(".env")) -> None:
@@ -184,6 +184,7 @@ def main() -> None:
     search_delay: float = config["search_delay"]  # type: ignore[assignment]
 
     seen_places: Set[str] = set()
+    seen_by_name_city: Set[str] = set()
 
     with output_file.open("w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=CSV_HEADERS)
@@ -205,13 +206,20 @@ def main() -> None:
                         continue
                     website = str(details.get("website") or "")
                     name = str(details.get("name") or place.get("name") or "").strip()
+                    phone = str(details.get("formatted_phone_number") or "")
 
                     if not name:
                         continue
                     if not site_inclusion and not website:
                         continue
 
+                    # Deduplicate by name + city combination
+                    dedup_key = f"{name}|{city}"
+                    if dedup_key in seen_by_name_city:
+                        continue
+
                     seen_places.add(place_id)
+                    seen_by_name_city.add(dedup_key)
                     writer.writerow(
                         {
                             "site_url": website,
@@ -219,6 +227,7 @@ def main() -> None:
                             "industry": industry,
                             "company_name": name,  # mirrors business_name per output spec
                             "city": city,
+                            "phone_number": phone,
                         }
                     )
                     time.sleep(detail_delay)
